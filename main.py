@@ -3,6 +3,8 @@ import pandas as pd
 from datetime import datetime, timedelta
 import datetime as dt
 import time
+import json
+
 
 def main():    
     # Begin timer
@@ -12,12 +14,19 @@ def main():
     new_final_df = [] # store processed info of all stores to produce a bigger df of outlets
 
     # Begin iteration
+    # Load up json file with username and password
+    with open("credentials.json", "r") as json_file:
+        loaded_credentials = json.load(json_file)
     api_key = 'f803b1f2-486e-4de7-9e6c-faa45366bb28'
-    username = input("Enter your username: ")
-    password = input("Enter your password: ")
-    #print("NB. Select a single day when using audit capture profile!\n")
-    print("Select one of the following file types:\n 1. audit capture profile\n 2. new items\n 3. old items\n 4. recruitment profile\n 5. recruitment items\n")
-    file_type = input("What file do you want to download?: ")
+    username = loaded_credentials["username"]
+    password = loaded_credentials["password"]
+    # Create a map for numerical input and file type
+    int_map = {1:"audit capture profile",2:"new items",
+               3:"old items",4:"recruitment profile",
+               5:"recruitment items"}
+    print("Instructions to download files:\n * Type 1 for audit capture profile\n * Type 2 for new items\n * Type 3 for old items\n * Type 4 for recruitment profile\n * Type 5 for recruitment items\n")
+    file_int = int(input("Enter the file number you want to download: "))
+    file_type = int_map.get(file_int)
     survey_id = input('Enter survey id: ') # input survey id
     first_day_str = input("Enter start date (YYYY-MM-DD): ")
     last_day_str = input("Enter end date (YYYY-MM-DD): ")

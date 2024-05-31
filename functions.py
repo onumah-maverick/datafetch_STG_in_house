@@ -450,7 +450,7 @@ class AuditCaptureDetails:
             melted_df.reset_index(inplace=True)
             melted_df_edit = melted_df.drop(columns=['Group'], axis=0)
             # Re-order columns
-            melted_df_final = melted_df_edit.iloc[:,[4,3,6,1,12,11,8,2,14,9,7,15,13,5,0,10]]
+            melted_df_final = melted_df_edit.iloc[:,[4,3,7,1,13,12,9,2,15,10,8,5,16,14,6,0,11]]
 
             # Finally, put all details together
             df_items_store_details = pd.concat([df_store_details, melted_df_final], axis=1)
@@ -467,6 +467,8 @@ class AuditCaptureDetails:
             print("Null")
         else:
             return df_items_store_details
+    
+
     
 # ------------------------------------------------------------------------------------------------------------------------------------------
     @staticmethod
@@ -515,7 +517,6 @@ class AuditCaptureDetails:
             info_display_df.columns = ["Element", "Attribute", "Value"]
             df_profile_extract = info_display_df[info_display_df['Attribute'].isin(['text'])].reset_index(drop=True)[['Element','Value']]
             selected_rows_1 = df_profile_extract.loc[(df_profile_extract['Element'] == 'FullVariable') | (df_profile_extract['Element'] == 'QuestionAnswer')]
-            #print(selected_rows_1)
             
             # Outlet Details
             outlet_details_df.columns = ["Element", "Attribute", "Value"]
@@ -533,7 +534,6 @@ class AuditCaptureDetails:
             df_remove_permanent = selected_rows_2.loc[(selected_rows_2['Element'] == 'Text') & (selected_rows_2['Value'].isin(['Permanetly Closed']))]
             selected_rows_2 = selected_rows_2.drop(df_remove_permanent.index)
             selected_rows_2 = selected_rows_2.drop(index=116)
-            #print(selected_rows_2)
 
             # Name # Pick item count and observations
             name_df.columns = ["Element", "Attribute", "Value"]
@@ -625,139 +625,254 @@ class AuditCaptureDetails:
 # ------------------------------------------------------------------------------------------------------------------------------------------
 
     @staticmethod
-    def transform_old_items(subj_id, survey_id, api_key, username, password):
+    def old_items_part_one(subj_id, survey_id, api_key, username, password):
         """
-        Extract the values you need
-        Load csv file into dataframe and then select responses in the FullVariable, QuestionAnswer sections
-        Create a DataFrame from the extracted data
-        """
-        try:
-            backbone = DownloadDetails()
-            response = backbone.download_xml(subj_id, survey_id, api_key, username, password)
-            data_list = backbone.xml_to_list(response)
-            df = pd.DataFrame(data_list, columns=["Element", "Attribute", "Value"])
-            df_extract_1 = df[df['Element'].isin(['FullVariable','QuestionAnswer'])] # the loaded csv file has columns Element, Attribute and Value. In the element column, for items, we pick the listed variables of interest ie. fullvariable, questionanswer,...
-            df_extract_1_new = df_extract_1.loc[df_extract_1.index[df_extract_1['Value'] == 'I_1_Purch_Item_Name'][0]:'I_1_Export_Category', :]
-            df_extract_1_final = df_extract_1_new.drop(df_extract_1_new[df_extract_1_new['Value'].str.match(r'I_\d+_Purch_Item_Details')].index)
-            df_extract_1_final = df_extract_1_final.reset_index(drop=True)
-            df_extract_1_final['Value'] = df_extract_1_final['Value'].str.replace(r'^I_\d+_', '', regex=True)
-            vanish_var= df_extract_1_final.loc[df_extract_1_final.index[df_extract_1_final['Value'] == 'Export_Category'][0]:, :]
-            df_extract_1_final = df_extract_1_final.drop(vanish_var.index)
+        Receives the parsed dataframe from STG and converts it into a dataframe holding information on Purchases.
+        """    
+        backbone = DownloadDetails()
+        response = backbone.download_xml(subj_id, survey_id, api_key, username, password)
+        data_list = backbone.xml_to_list(response)
+        df = pd.DataFrame(data_list, columns=["Element", "Attribute", "Value"]) # loading up parsed dataframe
+        df_extract_1 = df[df['Element'].isin(['FullVariable','QuestionAnswer'])] # the loaded csv file has columns Element, Attribute and Value. In the element column, for items, we pick the listed variables of interest ie. fullvariable, questionanswer,...
+        df_extract_1_new = df_extract_1.loc[df_extract_1.index[df_extract_1['Value'] == 'I_1_Purch_Item_Name'][0]:'I_1_Export_Category', :] # select rows b/n purch_item_name and export_category
+        df_extract_1_final = df_extract_1_new.drop(df_extract_1_new[df_extract_1_new['Value'].str.match(r'I_\d+_Purch_Item_Details')].index) # remove purch_item_details
+        df_extract_1_final = df_extract_1_final.reset_index(drop=True) # reset index to start from 0
+        df_extract_1_final['Value'] = df_extract_1_final['Value'].str.replace(r'^I_\d+_', '', regex=True) # remove 'I_1..(N-1)' from name
+        vanish_var= df_extract_1_final.loc[df_extract_1_final.index[df_extract_1_final['Value'] == 'Export_Category'][0]:, :] # select export_category to be removed
+        df_extract_1_final = df_extract_1_final.drop(vanish_var.index) # remove export_category
 
-            catch_list = ["Purch_Item_Name", "Purch_Prev_Foward_Stock",	"Purch_Prev_Back_Stock", "FowStock",\
-                        "BackStock", "Purch_Barcode", "Purch_Country", "Previous_Price", "Current_Price",\
-                        "Prev_Doc_Purch", "Prev_Oral_Purch", "Doc_Purch", "Oral_Purch", "Opening_Stock",\
-                        "Closing_Stock", "Final_Price",	"Prev_Purchases", "Current_Purchases", "Prev_Sales",\
-                        "Sales", "Sales_Reason", "Item_Observation"]
-            
-            nouveau_data = {name: [] for name in catch_list}
+        # Creating dataframe containing columns in the 'catch_list' list
+        catch_list = ["Purch_Item_Name", "Purch_Prev_Foward_Stock",	"Purch_Prev_Back_Stock", "FowStock",\
+                    "BackStock", "Purch_Barcode", "Purch_Country", "Previous_Price", "Current_Price",\
+                    "Prev_Doc_Purch", "Prev_Oral_Purch", "Doc_Purch", "Oral_Purch", "Opening_Stock",\
+                    "Closing_Stock", "Final_Price",	"Prev_Purchases", "Current_Purchases", "Prev_Sales",\
+                    "Sales", "Sales_Reason", "Item_Observation"]
+        
+        nouveau_data = {name: [] for name in catch_list}
 
-            # Initialize the current name
-            present_name = None
+        # Initialize the current name
+        present_name = None
 
-            # Iterate through df_extract_2_new and populate the new dataframe dictionary
-            for indexe, rowe in df_extract_1_final.iterrows():
-                if rowe['Element'] == 'FullVariable' and rowe['Value'] in catch_list:
-                    present_name = rowe['Value']
-                elif rowe['Element'] == 'QuestionAnswer' and present_name is not None:
-                    nouveau_data[present_name].append(rowe['Value'])
+        # Iterate through df_extract_1 and populate the new dataframe dictionary
+        for indexe, rowe in df_extract_1_final.iterrows():
+            if rowe['Element'] == 'FullVariable' and rowe['Value'] in catch_list:
+                present_name = rowe['Value']
+            elif rowe['Element'] == 'QuestionAnswer' and present_name is not None:
+                nouveau_data[present_name].append(rowe['Value'])
 
-            # Fill in any missing values with 'NA'
-            max_lengthe = max(len(nouveau_data[name]) for name in catch_list)
-            for name in catch_list:
-                nouveau_data[name] += ['NA'] * (max_lengthe - len(nouveau_data[name]))
+        # Fill in any missing values with 'NA'
+        max_lengthe = max(len(nouveau_data[name]) for name in catch_list)
+        for name in catch_list:
+            nouveau_data[name] += ['NA'] * (max_lengthe - len(nouveau_data[name]))
 
-            # Create the new dataframe
-            df_nice = pd.DataFrame(nouveau_data)
-            df_nice['Purch_Item_Name'] = df_nice['Purch_Item_Name'].str.replace(r'\s*\([^)]*\)', '', regex=True) # remove text in bracket
+        # Create the new dataframe
+        df_nice = pd.DataFrame(nouveau_data)
+        df_nice['Purch_Item_Name'] = df_nice['Purch_Item_Name'].str.replace(r'\s*\([^)]*\)', '', regex=True) # remove text in bracket
 
-            # -------------------------------------------------------------------------------------------------------------------------------------
-            # Pick country of origin
-            # Create an empty list to store the extracted data 
-            origin_holder = []
-
-            # Iterate through each row of the DataFrame
-            for index_3, row_3 in df.iterrows():
-                if row_3['Element'] == 'FullVariable':
-                    full_variable = row_3['Value']
-                    if re.match(r'I_\d+_Country_Origin', full_variable):
-                        variable = None
-                        country_origin = None
-                        for i in range(index_3+1, len(df)):
-                            if df.iloc[i]['Element'] == 'Variable':
-                                variable = df.iloc[i]['Value']
-                            elif df.iloc[i]['Element'] == 'QuestionAnswer':
-                                country_origin = df.iloc[i]['Value']
-                                origin_holder.append({'Country_Origin': country_origin})
-                                break
-
-            # Create a new DataFrame from the extracted data
-            df_extract_country = pd.DataFrame(origin_holder)
-
-            # Add up first two final dfs
-            df_old_items_part_1 = pd.concat([df_nice, df_extract_country], axis=1)
-
-        # -------------------------------------------------------------------------------------------------------------------------------------------------
-            df_extract_2 = df[df['Element'].isin(['Text','TopicAnswer'])]
-            df_extract_2_new = df_extract_2.loc[df_extract_2.index[df_extract_2['Value'] == 'ITEM_NAME'][0]:'FORWARD STOCK', :]
-            df_extract_2_new = df_extract_2_new.reset_index(drop=True)
-            df_remove = df_extract_2_new.loc[(df_extract_2_new['Element'] == 'Text') & (df_extract_2_new['Value'].isin(['Barcode', 'Country of Origin', 'Forward stock (Shelf)',\
-                                                                                                                    'Backward stock (Store Room)', 'Sales Price per single items(2 decimal place)',\
-                                                                                                                    'Item/Product Name/Description','Scan Barcode', 'Category Code', 'Previous Sales Price',\
-                                                                                                                    'Item Name', 'Item Barcode', 'Segment Code', 'Manufacturer', 'Brand Name',\
-                                                                                                                    'Flavour/Variant', 'Item Code', 'Item weight/ volume', 'old items count',\
-                                                                                                                    'Reason for a 50% increase or decrease<br>', 'Previous Forward Stock', 'Previous Backward Stock',\
-                                                                                                                    'Previous Documented Purchases', 'Previous Oral Purchases', 'Documented Purchases', 'Oral Purchases',\
-                                                                                                                    'Open Stock', 'Closing Stock', 'Final Price', 'Previous Sales', 'Sales',\
-                                                                                                                    'Item/Product Name', 'Number of New Items recorded', 'Field observations and Notes/Comments from the Auditor',\
-                                                                                                                    'Would you like to submit this survey?', 'Yes', 'Ex_Price_Reason', 'Reason for a 50% increase or decrease',\
-                                                                                                                    'Item/Product Name/ Description', 'Item unit', 'Forward stock (Shelf) {0}',\
-                                                                                                                    'Backward stock (Store Room) {0}', 'Item/Product Name&nbsp;/ Description' ]))]
-
-            df_extract_2_new = df_extract_2_new.drop(df_remove.index)
-            df_remove_other = df_extract_2_new.loc[(df_extract_2_new['Element'] == 'Text') & (df_extract_2_new['Value'].isin(['Category']))]
-            df_extract_2_new = df_extract_2_new.drop(df_remove_other.index)
-            df_remove_again = df_extract_2_new.loc[(df_extract_2_new['Element'] == 'Text') & (df_extract_2_new['Value'].isin(['Segment']))]
-            df_extract_2_new = df_extract_2_new.drop(df_remove_again.index)
-            df_remove_permanent = df_extract_2_new.loc[(df_extract_2_new['Element'] == 'Text') & (df_extract_2_new['Value'].isin(['Packaging']))]
-            df_extract_2_new = df_extract_2_new.drop(df_remove_permanent.index)
-            df_remove_question = df_extract_2_new.loc[(df_extract_2_new['Element'] == 'Text') & (df_extract_2_new['Value'].isin(['Amount']))]
-            df_extract_2_new = df_extract_2_new.drop(df_remove_question.index)
-
-            # ----------------- ----------- ---------------------
-
-            # Define the list of target names
-            target_names = ['ITEM_NAME', 'ITEM_NO', 'BARCODE', 'CATEGORY', 'CATEGORY_CODE', 'SEGMENT', 'SEGMENTS_CODE', 'MANUFACTURER', 'BRAND_NAME', 'VARIANT', 'ITEM_CODE',\
-                                'ITEM_WEIGHT', 'ITEM_UNIT', 'FORWARD_STOCK', 'BACKWARD_STOCK', 'SALES PRICE']
-            
-            new_data = {name: [] for name in target_names}
-
-            # Iterate through df_extract_2_new and populate the new dataframe dictionary
-            for index, row in df_extract_2_new.iterrows():
-                if row['Element'] == 'Text' and row['Value'] in target_names:
-                    current_name = row['Value']
-                elif row['Element'] == 'TopicAnswer' and current_name is not None:
-                    new_data[current_name].append(row['Value'])
-
-            # Fill in any missing values with 'NA'
-            max_length = max(len(new_data[name]) for name in target_names)
-            for name in target_names:
-                new_data[name] += ['NA'] * (max_length - len(new_data[name]))
-
-            # Create the new dataframe
-            df_new = pd.DataFrame(new_data)
-
-            # Creating final final
-            # Merge the DataFrames based on the common column with different names
-            final_old_items_df = pd.merge(df_new, df_old_items_part_1, left_on='ITEM_NAME', right_on='Purch_Item_Name', how='left')
-            final_old_items_df = final_old_items_df.loc[:,['Purch_Item_Name','ITEM_NAME','ITEM_NO','BARCODE','CATEGORY','CATEGORY_CODE','SEGMENT',\
-                                                            'SEGMENTS_CODE','MANUFACTURER','BRAND_NAME','VARIANT','ITEM_CODE','ITEM_WEIGHT', 'FORWARD_STOCK',\
-                                                            'ITEM_UNIT','Purch_Prev_Foward_Stock','Purch_Prev_Back_Stock','FowStock','BackStock','BACKWARD_STOCK', 'Purch_Barcode',\
-                                                            'Purch_Country','Previous_Price','Current_Price','Prev_Doc_Purch','Prev_Oral_Purch','Doc_Purch',\
-                                                            'Oral_Purch','Opening_Stock','Closing_Stock','Final_Price', 'Prev_Purchases', 'Current_Purchases','Prev_Sales','Sales',\
-                                                            'SALES PRICE', 'Sales_Reason', 'Country_Origin', 'Item_Observation']]
+        return df_nice
     
-        except IndexError:
-            print("Missing")
-        else:
-            return final_old_items_df
+    @staticmethod
+    def old_items_country_origin(subj_id, survey_id, api_key, username, password):
+        """
+        Selects the country of origin data from the parsed dataframe and stores it in a new dataframe.
+        """
+        backbone = DownloadDetails()
+        response = backbone.download_xml(subj_id, survey_id, api_key, username, password)
+        data_list = backbone.xml_to_list(response)
+        df = pd.DataFrame(data_list, columns=["Element", "Attribute", "Value"]) # loading up parsed dataframe
+        
+        # Create an empty list to store the extracted data 
+        origin_holder = []
+
+        # Iterate through each row of the DataFrame
+        for index_3, row_3 in df.iterrows():
+            if row_3['Element'] == 'FullVariable':
+                full_variable = row_3['Value']
+                if re.match(r'I_\d+_Country_Origin', full_variable):
+                    variable = None
+                    country_origin = None
+                    for i in range(index_3+1, len(df)):
+                        if df.iloc[i]['Element'] == 'Variable':
+                            variable = df.iloc[i]['Value']
+                        elif df.iloc[i]['Element'] == 'QuestionAnswer':
+                            country_origin = df.iloc[i]['Value']
+                            origin_holder.append({'Country_Origin': country_origin})
+                            break
+
+        # Create a new DataFrame from the extracted data
+        df_extract_country = pd.DataFrame(origin_holder)
+        return df_extract_country
+    
+    @staticmethod
+    def old_items_store_code(subj_id, survey_id, api_key, username, password):
+        """
+        Creates a new dataframe of outlet codes from the parsed dataframe
+        """
+        backbone = DownloadDetails()
+        response = backbone.download_xml(subj_id, survey_id, api_key, username, password)
+        data_list = backbone.xml_to_list(response)
+        df = pd.DataFrame(data_list, columns=["Element", "Attribute", "Value"]) # loading up parsed dataframe
+        # Adding up store code
+        df_store_code = df.loc[(df['Element'] == 'FullVariable') & (df['Value'].isin(['Outlet_Code_']))].index # identify row with outlet_code name
+        df_store_value = df_store_code + 3 # row with outlet code value
+        # Form dataframes out of fetched values
+        header_df = df.loc[df_store_code]
+        header_df = header_df.drop(['Element','Attribute'], axis=1)
+        header_df = header_df.reset_index(drop=True)
+        misc_df = df.loc[df_store_value]
+        misc_df = misc_df.drop(['Element','Attribute'], axis=1)
+        misc_df = misc_df.reset_index(drop=True)
+        
+        # Create dictionary to store and later convert values to dataframe
+        hold_store = {} # # Instantiate empty dict
+        # Create key, value for dictionary
+        outletdefine = header_df.iloc[0, 0]
+        outletvalue = misc_df.iloc[0, 0]
+        hold_store[outletdefine] = outletvalue  # Add the header and value to the dictionary
+        aux_df = pd.DataFrame([hold_store]) # Create dataframe        
+        return aux_df
+    
+    @staticmethod
+    def old_items_part_two(subj_id, survey_id, api_key, username, password):
+        """
+        Receives the parsed dataframe from STG and converts it into a dataframe holding information on Items.
+        """
+        backbone = DownloadDetails()
+        response = backbone.download_xml(subj_id, survey_id, api_key, username, password)
+        data_list = backbone.xml_to_list(response)
+        df = pd.DataFrame(data_list, columns=["Element", "Attribute", "Value"]) # loading up parsed dataframe
+        df_older = df[df['Element'].isin(['Text','TopicAnswer'])]
+        df_extract_2_old = df_older.loc[df_older.index[df_older['Value'] == 'ITEM_NAME'][0]:'FORWARD STOCK', :]
+        df_extract_2_old = df_extract_2_old.reset_index(drop=True)
+        df_remove = df_extract_2_old.loc[(df_extract_2_old['Element'] == 'Text') & (df_extract_2_old['Value'].isin(['Barcode', 'Country of Origin', 'Forward stock (Shelf)',\
+                                                                                                                'Backward stock (Store Room)', 'Sales Price per single items(2 decimal place)',\
+                                                                                                                'Item/Product Name/Description','Scan Barcode', 'Category Code', 'Previous Sales Price',\
+                                                                                                                'Item Name', 'Item Barcode', 'Segment Code', 'Manufacturer', 'Brand Name',\
+                                                                                                                'Flavour/Variant', 'Item Code', 'Item weight/ volume', 'old items count',\
+                                                                                                                'Reason for a 50% increase or decrease<br>', 'Previous Forward Stock', 'Previous Backward Stock',\
+                                                                                                                'Previous Documented Purchases', 'Previous Oral Purchases', 'Documented Purchases', 'Oral Purchases',\
+                                                                                                                'Open Stock', 'Closing Stock', 'Final Price', 'Previous Sales', 'Sales',\
+                                                                                                                'Item/Product Name', 'Number of New Items recorded', 'Field observations and Notes/Comments from the Auditor',\
+                                                                                                                'Would you like to submit this survey?', 'Yes', 'Ex_Price_Reason', 'Reason for a 50% increase or decrease',\
+                                                                                                                'Item/Product Name/ Description', 'Item unit', 'Forward stock (Shelf) {0}',\
+                                                                                                                'Backward stock (Store Room) {0}', 'Item/Product Name&nbsp;/ Description' ]))]
+
+        df_extract_2_old = df_extract_2_old.drop(df_remove.index)
+        df_remove_other = df_extract_2_old.loc[(df_extract_2_old['Element'] == 'Text') & (df_extract_2_old['Value'].isin(['Category']))]
+        df_extract_2_old = df_extract_2_old.drop(df_remove_other.index)
+        df_remove_again = df_extract_2_old.loc[(df_extract_2_old['Element'] == 'Text') & (df_extract_2_old['Value'].isin(['Segment']))]
+        df_extract_2_old = df_extract_2_old.drop(df_remove_again.index)
+        df_remove_permanent = df_extract_2_old.loc[(df_extract_2_old['Element'] == 'Text') & (df_extract_2_old['Value'].isin(['Packaging']))]
+        df_extract_2_old = df_extract_2_old.drop(df_remove_permanent.index)
+        df_remove_question = df_extract_2_old.loc[(df_extract_2_old['Element'] == 'Text') & (df_extract_2_old['Value'].isin(['Amount']))]
+        df_extract_2_old = df_extract_2_old.drop(df_remove_question.index)
+        
+
+        # Second dataframe cleaning
+        df_extract_2 = df_extract_2_old[df_extract_2_old['Element'].isin(['Text','TopicAnswer'])]
+        df_extract_2_new = df_extract_2.loc[df_extract_2.index[df_extract_2['Value'] == 'ITEM_NAME'][0]:'FORWARD STOCK', :]
+        df_extract_2_new = df_extract_2_new.reset_index(drop=True)
+        df_remove_new = df_extract_2_new.loc[(df_extract_2_new['Element'] == 'Text') & (df_extract_2_new['Value'].isin(['Barcode', 'Country of Origin', 'Forward stock (Shelf)',\
+                                                                                                                'Backward stock (Store Room)', 'Sales Price per single items(2 decimal place)',\
+                                                                                                                'Item/Product Name/Description','Scan Barcode', 'Category Code', 'Previous Sales Price',\
+                                                                                                                'Item Name', 'Item Barcode', 'Segment Code', 'Manufacturer', 'Brand Name',\
+                                                                                                                'Flavour/Variant', 'Item Code', 'Item weight/ volume', 'old items count',\
+                                                                                                                'Reason for a 50% increase or decrease<br>', 'Previous Forward Stock', 'Previous Backward Stock',\
+                                                                                                                'Previous Documented Purchases', 'Previous Oral Purchases', 'Documented Purchases', 'Oral Purchases',\
+                                                                                                                'Open Stock', 'Closing Stock', 'Final Price', 'Previous Sales', 'Sales',\
+                                                                                                                'Item/Product Name', 'Number of New Items recorded', 'Field observations and Notes/Comments from the Auditor',\
+                                                                                                                'Would you like to submit this survey?', 'Yes', 'Ex_Price_Reason', 'Reason for a 50% increase or decrease',\
+                                                                                                                'Item/Product Name/ Description', 'Item unit', 'Forward stock (Shelf) {0}',\
+                                                                                                                'Backward stock (Store Room) {0}', 'Item/Product Name&nbsp;/ Description' ]))]
+
+        df_extract_2_new = df_extract_2_new.drop(df_remove_new.index)
+        df_remove_other_new = df_extract_2_new.loc[(df_extract_2_new['Element'] == 'Text') & (df_extract_2_new['Value'].isin(['Category']))]
+        df_extract_2_new = df_extract_2_new.drop(df_remove_other_new.index)
+        df_remove_again_new = df_extract_2_new.loc[(df_extract_2_new['Element'] == 'Text') & (df_extract_2_new['Value'].isin(['Segment']))]
+        df_extract_2_new = df_extract_2_new.drop(df_remove_again_new.index)
+        df_remove_permanent_new = df_extract_2_new.loc[(df_extract_2_new['Element'] == 'Text') & (df_extract_2_new['Value'].isin(['Packaging']))]
+        df_extract_2_new = df_extract_2_new.drop(df_remove_permanent_new.index)
+        df_remove_question_new = df_extract_2_new.loc[(df_extract_2_new['Element'] == 'Text') & (df_extract_2_new['Value'].isin(['Amount']))]
+        df_extract_2_new = df_extract_2_new.drop(df_remove_question_new.index)
+
+
+        # Define the list of target names
+        target_names = ['ITEM_NAME', 'ITEM_NO', 'BARCODE', 'CATEGORY', 'CATEGORY_CODE', 'SEGMENT', 'SEGMENTS_CODE', 'MANUFACTURER', 'BRAND_NAME', 'VARIANT', 'ITEM_CODE',
+                        'ITEM_WEIGHT', 'ITEM_UNIT', 'FORWARD_STOCK', 'BACKWARD_STOCK', 'SALES PRICE']
+
+        # Identify the positions of 'ITEM_NAME' rows
+        item_name_positions = df_extract_2_new.index[df_extract_2_new['Value'] == 'ITEM_NAME'].tolist()
+
+        # Initialize a dictionary to hold the extracted values
+        extracted_values = {name: [] for name in target_names}
+
+        # Iterate through 'ITEM_NAME' positions to extract values for each item
+        for i in range(len(item_name_positions)):
+            current_item_values = {name: 'N/A' for name in target_names}
+            start_index = item_name_positions[i]
+            end_index = item_name_positions[i + 1] if i < len(item_name_positions) - 1 else len(df_extract_2_new)
+            sub_df = df_extract_2_new.iloc[start_index:end_index]
+            
+            # Initialize variables to track the last identified item and its value
+            last_item = None
+            last_value = None
+            
+            # Iterate through the rows of the sub-dataframe
+            for index, row in sub_df.iterrows():
+                if row['Value'] in target_names:
+                    current_item = row['Value']
+                    last_item = current_item
+                elif last_item in target_names and last_value is None:
+                    if row['Attribute'] == 'text':
+                        last_value = row['Value']
+                        current_item_values[last_item] = last_value
+                        last_item = None
+                        last_value = None
+            
+            # Append the extracted values to the final dictionary
+            for name, value in current_item_values.items():
+                extracted_values[name].append(value)
+
+        # Create the final DataFrame
+        final_df = pd.DataFrame(extracted_values)
+        final_df.replace("N/A", pd.NA, inplace=True)
+
+        # Drop rows where columns E, F, and G are NaN
+        final_df.dropna(subset=['FORWARD_STOCK', 'BACKWARD_STOCK', 'SALES PRICE'], how='all', inplace=True)
+        return final_df
+    
+    @staticmethod
+    def transform_old_items(subj_id, survey_id, api_key, username, password):
+            """
+            Extract the values you need
+            Load csv file into dataframe and then select responses in the FullVariable, QuestionAnswer sections
+            Create a DataFrame from the extracted data
+            """
+            try:
+                audit = AuditCaptureDetails()
+                part_one = audit.old_items_part_one(subj_id, survey_id, api_key, username, password)
+                part_two = audit.old_items_part_two(subj_id, survey_id, api_key, username, password)
+                #origin_country = audit.old_items_country_origin(subj_id, survey_id, api_key, username, password)
+                stores = audit.old_items_store_code(subj_id, survey_id, api_key, username, password)
+
+                # Add up first three final dfs
+                df_old_items_part_1 = pd.concat([part_one, stores], axis=1)#origin_country], axis=1)
+                df_old_items_part_1['Outlet_Code_'] = df_old_items_part_1['Outlet_Code_'].fillna(df_old_items_part_1['Outlet_Code_'].iloc[0])
+
+                # Creating final final
+                # Merge the DataFrames based on the common column with different names
+                final_old_items_df = pd.merge(part_two, df_old_items_part_1, left_on='ITEM_NAME', right_on='Purch_Item_Name', how='left')
+                final_old_items_df = final_old_items_df.loc[:,['Outlet_Code_', 'Purch_Item_Name','ITEM_NAME','ITEM_NO','BARCODE','CATEGORY','CATEGORY_CODE','SEGMENT',\
+                                                                'SEGMENTS_CODE','MANUFACTURER','BRAND_NAME','VARIANT','ITEM_CODE','ITEM_WEIGHT', 'FORWARD_STOCK',\
+                                                                'ITEM_UNIT','Purch_Prev_Foward_Stock','Purch_Prev_Back_Stock','FowStock','BackStock','BACKWARD_STOCK', 'Purch_Barcode',\
+                                                                'Purch_Country','Previous_Price','Current_Price','Prev_Doc_Purch','Prev_Oral_Purch','Doc_Purch',\
+                                                                'Oral_Purch','Opening_Stock','Closing_Stock','Final_Price', 'Prev_Purchases', 'Current_Purchases','Prev_Sales','Sales',\
+                                                                'SALES PRICE', 'Sales_Reason', 'Item_Observation']]#'Country_Origin']]
+            except IndexError:
+                print("Missing")
+            else:
+                return final_old_items_df
+
+
+
+
