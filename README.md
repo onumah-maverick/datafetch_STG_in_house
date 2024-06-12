@@ -4,6 +4,8 @@ It contains an init.py file, a requirements.txt file and the scripts (functions.
 
 
 # Implementation
-- Run git clone https://github.com/onumah-maverick/datafetch_STG_in_house.git
+- Run git clone https://github.com/onumah-maverick/datafetch_STG_in_house.git to download the files
+- Replace username and password in credentials.json with personal details
+- Create a virtual environment using venv or conda
 - Run pip install -r requirements.txt
-- Run main.py
+- Run python main.py or py main.py

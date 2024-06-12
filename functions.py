@@ -533,6 +533,8 @@ class AuditCaptureDetails:
             selected_rows_2 = selected_rows_2.drop(df_remove_again.index)
             df_remove_permanent = selected_rows_2.loc[(selected_rows_2['Element'] == 'Text') & (selected_rows_2['Value'].isin(['Permanetly Closed']))]
             selected_rows_2 = selected_rows_2.drop(df_remove_permanent.index)
+            df_remove_prevstatus = selected_rows_2.loc[(selected_rows_2['Element'] == 'Text') & (selected_rows_2['Value'].isin(['Prev_Status']))]
+            selected_rows_2 = selected_rows_2.drop(df_remove_prevstatus.index)
             selected_rows_2 = selected_rows_2.drop(index=116)
 
             # Name # Pick item count and observations
@@ -560,7 +562,7 @@ class AuditCaptureDetails:
             question_answer_index = full_variable_index + 3
 
             # Add the QuestionAnswer row to the new DataFrame
-            new_reason_df = new_reason_df.append(name_df.loc[question_answer_index])
+            new_reason_df = pd.concat([new_reason_df,name_df.loc[question_answer_index]])
             new_reason_df = new_reason_df.drop('Attribute', axis=1)
             
             # Special variables that do not appear in FullVariable-QuestionAnswer pairing
@@ -598,7 +600,7 @@ class AuditCaptureDetails:
             # Rename columns
             new_combined_df_renamed = new_combined_df.rename(columns={"Outlet Type Description":"Outlet Type", "Name of owner":"Outlet Owner",
                                                                     "Selling Area":"Outlet Size", "ClientDuration":"NetDuration", 
-                                                                    "Q_105":"Submit", "Q_128":"Submit"})
+                                                                    "Q_105":"Submit", "Q_128":"Submit", "Q_126":"Submit"})
             # Reorder columns
             # Initialize the DataFrames
             df_with_reason = None
@@ -608,14 +610,15 @@ class AuditCaptureDetails:
                 df_with_reason = new_combined_df_renamed.loc[:,['SubjectNum','Date','Surveyor','Duration','NetDuration','Upload','VisitStart','VisitEnd','Outlet_Code_','OutletName',\
                                                         'CurrDate','Previous Date','Country','City','Outlet Type','Outlet Type Code','Outlet Owner','Outlet Size','Street Name',\
                                                             'Landmark','Locality','Previous Outlet Status','Channel','Cell_Name','Prev_Item_Count',	'days','GPS',\
-                                                            'Submit','TC_PL','Reason']]
+                                                            'Submit','TC_PL','Reason', 'Profile_Change', 'PS']]
             else:
                 df_without_reason = new_combined_df_renamed.loc[:,['SubjectNum','Date','Surveyor','Duration','NetDuration','Upload','VisitStart','VisitEnd','Outlet_Code_','OutletName',\
                                                         'CurrDate','Previous Date','Country','City','Outlet Type','Outlet Type Code','Outlet Owner','Outlet Size','Street Name',\
                                                             'Landmark','Locality','Previous Outlet Status','Channel','Cell_Name','Prev_Item_Count',	'days','GPS','old_items_count',\
-                                                            'ItemCount','Observations','Submit','TC_PL']]
+                                                            'ItemCount','Observations','Submit','TC_PL', 'Profile_Change', 'PS']]
             # Concatenate the two DataFrames
             final_combined_renamed_df = pd.concat([df_with_reason, df_without_reason], ignore_index=True)
+            #final_combined_renamed_df = final_combined_renamed_df.drop(['OutletName','Outlet Type', 'Outlet Type Code'], axis=1)
         except NameError:
             print("Empty columns")
         except KeyError:
